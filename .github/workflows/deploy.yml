@@ -1,0 +1,95 @@
+#name: Deploy
+#
+#on:
+#  push:
+#    branches:
+#      - dev
+#      - qa
+#      - stage
+#      - prod
+#
+#env:
+#  AWS_REGION: us-east-1
+#  BRANCH_NAME: ${{ github.ref_name }}
+#  PROJECT_NAME: pm
+#  SERVICE_NAME: user
+#
+#jobs:
+#  setup_github_environment:
+#    name: Setup GitHub environment
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: 'Set the environment based on the branch'
+#        id: branch_check
+#        run: |
+#          echo "Running on branch ${{ env.BRANCH_NAME }}"
+#          if [ "${{ env.BRANCH_NAME }}" = "prod" ]; then
+#            echo "::set-output name=env_name::prod"
+#          else
+#             echo "::set-output name=env_name::nonprod"
+#          fi
+#    outputs:
+#      env_name: ${{ steps.branch_check.outputs.env_name }}
+#
+#  test:
+#    name: Test
+#    needs:
+#      - setup_github_environment
+#    uses: ./.github/workflows/test.yml
+#
+#  build_and_deploy:
+#    name: Build, push and deploy
+#    needs:
+#      - setup_github_environment
+#      - test
+#    runs-on: ubuntu-latest
+#    environment:
+#      name: ${{ needs.setup_github_environment.outputs.env_name }}
+#
+#    steps:
+#      - name: Checkout git repo
+#        uses: actions/checkout@v3
+#        with:
+#          fetch-depth: 0
+#
+#      - name: Set up JDK 17
+#        uses: actions/setup-java@v3
+#        with:
+#          java-version: '17'
+#          distribution: 'temurin'
+#          cache: maven
+#
+#      - name: Configure AWS Credentials
+#        uses: aws-actions/configure-aws-credentials@v1
+#        with:
+#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region: ${{ env.AWS_REGION }}
+#
+#      - name: Login to Amazon ECR
+#        id: login-ecr
+#        uses: aws-actions/amazon-ecr-login@v1
+#
+#      - name: Build & Push to Amazon ECR
+#        id: build-image
+#        env:
+#          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+#          ECR_REPOSITORY: ${{ env.PROJECT_NAME }}-${{ env.SERVICE_NAME }}-${{ env.BRANCH_NAME }}
+#          BUILD_ENVIRONMENT: ${{ env.BRANCH_NAME }}
+#          NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+#          IMAGE_TAG: ${{ github.sha }}
+#        run: |
+#          mvn package -DskipTests
+#          docker build --build-arg SPRING_PROFILE=$BUILD_ENVIRONMENT --build-arg NEW_RELIC_LICENSE_KEY=$NEW_RELIC_LICENSE_KEY -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+#          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+#          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+#          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+#          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+#
+#      - name: Deploy AWS CloudFormation
+#        uses: aws-actions/aws-cloudformation-github-deploy@v1
+#        with:
+#          name: ${{ env.PROJECT_NAME }}-${{ env.SERVICE_NAME }}-${{ env.BRANCH_NAME }}
+#          template: tools/cloudformation/ecs-service.yaml
+#          parameter-overrides: "Environment=${{ env.BRANCH_NAME }},GitHubSHA=${{ github.sha }}"
+#          capabilities: 'CAPABILITY_NAMED_IAM'

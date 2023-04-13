@@ -1,0 +1,51 @@
+#name: Test
+#
+#on:
+#  workflow_call:
+#  pull_request:
+#    branches:
+#      - dev
+#      - qa
+#      - stage
+#      - prod
+#
+#jobs:
+#  check_message:
+#    name: Check the message
+#    runs-on: ubuntu-latest
+
+#    steps:
+#      - name: Check commit message
+#        run: |
+#          COMMIT_MESSAGE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ github.repository }}/commits?sha=${{ github.head_ref }} | jq -r '.[0].commit.message')
+#          echo "Commit message: $COMMIT_MESSAGE"
+#          if [[ "$COMMIT_MESSAGE" =~ ^\[HMR-[0-9]{1,6}:(patch|minor|major)\]\ [a-zA-Z0-9\ .,\)\(-_]{5,200}$ ]];
+#          then
+#            echo "The commit message is matching with regular expression.";
+#          else
+#            echo "The commit message doesn't match with regular expression: ^\[HMR-[0-9]{1,6}:(patch|minor|major)\]\ [a-zA-Z0-9\ .,\)\(-_]{5,200}$"
+#            exit 1;
+#          fi
+
+#  build_test:
+#    name: Test the application
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#      - name: Checkout git repo
+#        uses: actions/checkout@v3
+#        with:
+#          fetch-depth: 0
+#
+#      - name: Set up JDK 17
+#        uses: actions/setup-java@v3
+#        with:
+#          java-version: '17'
+#          distribution: 'temurin'
+#          cache: maven
+#
+#      - name: Run Localstack container
+#        run:  docker-compose -f src/test/resources/docker/images/docker-compose.yml up -d
+#
+#      - name: Run tests
+#        run: mvn -B test
